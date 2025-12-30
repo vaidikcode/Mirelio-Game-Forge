@@ -95,13 +95,31 @@ async def analyse_timestamps(video_url: str) -> List[EventInput]:
             video_bytes = response.content
 
         prompt_text = """
-        You are a Game Audio Director. Watch this gameplay video.
-        Identify discrete actions that require sound effects.
-        For each action, provide:
-        1. A short name.
-        2. The start timestamp and duration(duration needs to be atleast 1 sec)
-        3. A list of 3 DISTINCT and really detailed describing the whole scene text prompts to generate this sound. The text prompt should also describe duration of sound.
-        Return pure JSON.
+        You are a Game Audio Director analyzing gameplay footage frame-by-frame.
+        
+        CRITICAL REQUIREMENTS:
+        1. Watch the ENTIRE video carefully to identify ALL significant gameplay events
+        2. For EACH event, determine the EXACT moment it begins (in seconds with 2 decimal precision)
+        3. Calculate REALISTIC duration - how long the action/sound should last (minimum 1s, maximum 5s)
+        
+        For each event provide:
+        - name: Short, descriptive name (e.g., "Jump", "Sword Swing", "Footstep")
+        - start: Exact timestamp in seconds when the action BEGINS (e.g., 2.45)
+        - duration: How long the sound effect should last (e.g., 1.2 for a quick action, 2.5 for longer)
+        - prompts: Array of 3 DISTINCT, highly detailed audio descriptions that:
+          * Describe the sonic characteristics (pitch, tone, intensity)
+          * Include environmental context (echoes, reverb, space)
+          * Specify the sound's evolution over time
+          * Mention material/texture sounds if applicable
+        
+        EXAMPLE:
+        {"name": "Door Creak", "start": 5.30, "duration": 1.8, "prompts": [
+          "Old wooden door slowly creaking open with rusty metal hinges squeaking, echoing in empty hallway, 1.8 seconds",
+          "Heavy oak door groaning with stress, metal hardware rattling, slow sustained creak lasting 1.8 seconds",
+          "Antique door with worn hinges producing high-pitched metallic squeal followed by deep wood groans, 1.8 second duration"
+        ]}
+        
+        Return ONLY valid JSON array. NO markdown, NO code blocks.
         """
 
         response = client.models.generate_content(

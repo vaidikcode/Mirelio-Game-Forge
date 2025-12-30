@@ -17,6 +17,7 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState('')
   const videoRef = useRef(null)
+  const videoTimeoutRef = useRef(null)
 
   const handleFileChange = (e) => {
     const file = e.target.files[0]
@@ -83,6 +84,7 @@ function App() {
 
   const handleReset = () => {
     if (localVideoUrl) URL.revokeObjectURL(localVideoUrl)
+    if (videoTimeoutRef.current) clearTimeout(videoTimeoutRef.current)
     setProjectName('')
     setVideoFile(null)
     setVideoUrl('')
@@ -94,18 +96,39 @@ function App() {
 
   const handleAudioPlay = (audioElement) => {
     if (videoRef.current && selectedEvent) {
+      // Clear any existing timeout
+      if (videoTimeoutRef.current) {
+        clearTimeout(videoTimeoutRef.current)
+      }
+      
+      // Seek to event start and play
       videoRef.current.currentTime = selectedEvent.start
       videoRef.current.play()
+      
+      // Stop video after event duration
+      videoTimeoutRef.current = setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.pause()
+        }
+      }, selectedEvent.duration * 1000) // Convert to milliseconds
     }
   }
 
   const handleAudioPause = () => {
+    // Clear timeout and pause video
+    if (videoTimeoutRef.current) {
+      clearTimeout(videoTimeoutRef.current)
+    }
     if (videoRef.current) {
       videoRef.current.pause()
     }
   }
 
   const handleAudioEnded = () => {
+    // Clear timeout and pause video
+    if (videoTimeoutRef.current) {
+      clearTimeout(videoTimeoutRef.current)
+    }
     if (videoRef.current) {
       videoRef.current.pause()
     }
