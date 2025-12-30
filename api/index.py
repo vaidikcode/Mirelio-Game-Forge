@@ -11,7 +11,6 @@ from google import genai
 from google.genai import types
 from dotenv import load_dotenv
 
-urllib3.disable_warnings()
 load_dotenv()
 
 app = FastAPI(docs_url="/api/docs", openapi_url="/api/openapi.json")

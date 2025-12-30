@@ -3,7 +3,8 @@ import axios from 'axios'
 import { supabase } from './supabaseClient'
 import './App.css'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Use relative path for production (Vercel), localhost for local dev
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:8000' : '')
 
 function App() {
   const [projectName, setProjectName] = useState('')
