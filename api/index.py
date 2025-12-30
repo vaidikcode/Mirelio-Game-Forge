@@ -1,7 +1,6 @@
 import os
 import json
 import httpx
-import urllib3
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +12,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(docs_url="/api/docs", openapi_url="/api/openapi.json")
+app = FastAPI(
+    docs_url="/api/docs", 
+    openapi_url="/api/openapi.json"
+)
 
 app.add_middleware(
     CORSMiddleware,
