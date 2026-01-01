@@ -51,12 +51,29 @@ class EventOutput(BaseModel):
     start: float
     duration: float
 
-###############################
-async def generate_fallback_audio(http_client: httpx.AsyncClient, prompt: str, duration: float, project: str, name: str, index: int) -> str:
-    """
-    Invoked when Mirelo fails. Uses ElevenLabs (Free Tier) to generate SFX.
-    """
-    print(f"   ⚠️ Mirelo failed. Fallback to ElevenLabs for: {prompt[:15]}...")
+def generate_wwise_map(results: List[EventOutput], project_name: str) -> str:
+    output = "Audio File\tObject Path\tObject Type\tNotes\n"
+    
+    for event in results:
+        clean_name = event.name.replace(" ", "")
+        container_path = f"\\Actor-Mixer Hierarchy\\Default Work Unit\\<Folder>{project_name}\\<Random Container>Sfx_{clean_name}"
+        
+        for i, url in enumerate(event.variations):
+            filename = f"{event.name.replace(' ', '_')}_{i}.mp3"
+            line = f"C:\\Mirelo_Assets\\{filename}\t{container_path}\tSound SFX\tAI Generated\n"
+            output += line
+            
+    return output
+
+async def generate_fallback_audio(
+    http_client: httpx.AsyncClient, 
+    prompt: str, 
+    duration: float, 
+    project: str,
+    name: str,
+    index: int
+) -> str:
+    print(f"   ⚠️ Fallback to ElevenLabs: '{prompt[:15]}...'")
     try:
         payload = {
             "text": prompt,
@@ -71,7 +88,6 @@ async def generate_fallback_audio(http_client: httpx.AsyncClient, prompt: str, d
         )
 
         if resp.status_code == 200:
-            # Upload raw audio bytes to Supabase to get a URL
             filename = f"{project}/{name.replace(' ', '_')}_fallback_{index}.mp3"
             supabase.storage.from_("videos").upload(
                 path=filename,
@@ -83,8 +99,7 @@ async def generate_fallback_audio(http_client: httpx.AsyncClient, prompt: str, d
     except Exception as e:
         print(f"   Fallback failed: {e}")
     
-    return "const" 
-######################################
+    return "const"
 
 async def analyse_timestamps(video_url: str) -> List[EventInput]:
     try:
@@ -161,12 +176,15 @@ async def process(video: Video):
         for event in events:
             print(event)
             variations = []
+            
             for i in range(3):
+                text_prompt = event.prompts[i] if i < len(event.prompts) else ""
+                
                 payload = {
                     "video_url": video.url,
                     "start_offset": event.start,
-                    "duration": event.duration,
-                    "text_prompt": event.prompts[i] if i < len(event.prompts) else "",
+                    "duration": max(event.duration, 1.0),
+                    "text_prompt": text_prompt,
                     "seed": i * 100 + 55, 
                 }
     
@@ -178,40 +196,43 @@ async def process(video: Video):
                         json=payload,
                         headers={"x-api-key": MIRELO_KEY}
                     )
-
                     if resp.status_code == 200:
                         api_url = resp.json().get("audio_url")
-                        if api_url:
-                            url = api_url
-                        
+                        if api_url: url = api_url
                 except Exception:
-                    print("M call failed")
                     pass
 
                 if url == "const":
-                    text_prompt = event.prompts[i] if i < len(event.prompts) else ""
                     url = await generate_fallback_audio(
-                        http_client, 
-                        text_prompt, 
-                        event.duration, 
-                        video.project, 
-                        event.name, 
-                        i
+                        http_client, text_prompt, event.duration, 
+                        video.project, event.name, i
                     )
 
                 variations.append(url)
 
             if variations:
                 try:
-                    result = supabase.table("assets").insert({
+                    supabase.table("assets").insert({
                         "project": video.project,
                         "event_name": event.name,
                         "timestamp": event.start,
                         "variations": variations,
                     }).execute()
-                except Exception as e:
+                except Exception:
                     pass
 
-            results.append(EventOutput(name=event.name, variations=variations, prompts=event.prompts, start=event.start, duration=event.duration))
+            results.append(EventOutput(
+                name=event.name, 
+                variations=variations, 
+                prompts=event.prompts, 
+                start=event.start, 
+                duration=event.duration
+            ))
 
-    return {"status": "success", "data": results}
+    wwise_data = generate_wwise_map(results, video.project)
+
+    return {
+        "status": "success", 
+        "data": results,
+        "wwise_import_map": wwise_data
+    }
