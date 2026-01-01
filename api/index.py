@@ -183,9 +183,10 @@ async def process(video: Video):
                 payload = {
                     "video_url": video.url,
                     "start_offset": event.start,
-                    "duration": max(event.duration, 1.0),
+                    "duration": event.duration,
                     "text_prompt": text_prompt,
-                    "seed": i * 100 + 55, 
+                    "seed": i * 100 + 55,
+                    "model_version": "latest", 
                 }
     
                 url = "const"
@@ -196,11 +197,17 @@ async def process(video: Video):
                         json=payload,
                         headers={"x-api-key": MIRELO_KEY}
                     )
-                    if resp.status_code == 200:
+
+                    if resp.status_code in [200, 201]:
                         api_url = resp.json().get("audio_url")
-                        if api_url: url = api_url
-                except Exception:
-                    pass
+                        if api_url:
+                            url = api_url
+                            print(f"✓ Mirelo success: {event.name} variation {i+1}")
+                    else:
+                        print(f"⚠️ Mirelo Error {resp.status_code}: {resp.text}") 
+                        
+                except Exception as e:
+                    print(f"   Mirelo Call Failed: {e}")
 
                 if url == "const":
                     url = await generate_fallback_audio(

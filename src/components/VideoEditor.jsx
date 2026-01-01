@@ -327,15 +327,26 @@ function VideoEditor() {
               <div key={idx} className="variation-item">
                 <div className="variation-top">
                   <span className="var-label">VAR {idx + 1}</span>
-                  <a href={url} download className="dl-btn">↓</a>
+                  <a 
+                    href={url} 
+                    download={`${projectName}_${selectedEvent.name.replace(' ', '_')}_var${idx + 1}.mp3`}
+                    className="dl-btn"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    ↓
+                  </a>
                 </div>
                 <audio 
                   controls 
                   src={url} 
                   className="audio-player"
+                  preload="metadata"
+                  crossOrigin="anonymous"
                   onPlay={(e) => handleAudioPlay(e.target)}
                   onPause={handleAudioPause}
                   onEnded={handleAudioEnded}
+                  onError={(e) => console.error('Audio playback error:', e)}
                 />
                 <div className="var-prompt">
                   {selectedEvent.prompts[idx] || 'Generated audio'}
