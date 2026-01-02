@@ -74,31 +74,46 @@ async def analyse_timestamps(video_url: str) -> List[EventInput]:
             video_bytes = response.content
 
         prompt_text = """
-        You are a Game Audio Director analyzing gameplay footage frame-by-frame.
+        You are a Senior Combat Audio Designer for a AAA fighting game (like Tekken, Street Fighter, or God of War).
+        Your task is to perform a frame-by-frame "Spotting Session" for the provided gameplay footage.
+
+        ### 1. IDENTIFY COMBAT EVENTS (Archetypes)
+        Scan the video for these specific combat audio events:
+        - **IMPACTS:** Punches, kicks, weapon hits, body slams.
+        - **WHOOSHES:** Weapon swings, arm movements (these often happen *before* an impact).
+        - **FOLEY:** Footsteps, jump landings, body falls, cloth rustles.
+        - **VOCALS:** Effort grunts (attacking), pain grunts (getting hit).
+
+        ### 2. TIMING & DURATION RULES (STRICT):
+        - **START TIME:** Must be the EXACT frame the action initiates. Precision is key for combat sync.
+        - **DURATION (THE 1.0s RULE):**
+          - Combat sounds need "tails" (decay/reverb) to sound powerful.
+          - **Logic:** `Final_Duration = MAX(Visual_Duration, 1.0)`
+          - *Example:* A jab is 0.1s visually. Output `1.0` (Impact + Decay).
+          - *Example:* A slow-motion kill cam is 3.5s. Output `3.5`.
+          - **NEVER** output a duration less than 1.0 and greater than 10.
+
+        ### 3. PROMPT ENGINEERING (VISCERAL QUALITY):
+        Provide 3 DISTINCT prompts for an SFX generator. Use "Visceral" language.
+        - **Bad:** "Punch sound."
+        - **Good:** "Heavy, bone-crunching impact, wet meat texture, low-end sub-bass thud, aggressive transient."
+        - **Good:** "High-velocity air whoosh, sharp snapping cloth sound, cutting through air."
+
+        ### OUTPUT FORMAT:
+        Return ONLY a raw JSON array.
         
-        CRITICAL REQUIREMENTS:
-        1. Watch the ENTIRE video carefully to identify ALL significant gameplay events
-        2. For EACH event, determine the EXACT moment it begins (in seconds with 2 decimal precision)
-        3. Calculate REALISTIC duration - how long the action/sound should last (minimum 1s)
-        
-        For each event provide:
-        - name: Short, descriptive name (e.g., "Jump", "Sword Swing", "Footstep")
-        - start: Exact timestamp in seconds when the action BEGINS
-        - duration: How long the sound effect should last. Should be minimum 1 second.
-        - prompts: Array of 3 DISTINCT, highly detailed audio descriptions that:
-          * Describe the sonic characteristics (pitch, tone, intensity)
-          * Include environmental context (echoes, reverb, space)
-          * Specify the sound's evolution over time
-          * Mention material/texture sounds if applicable
-        
-        EXAMPLE:
-        {"name": "Door Creak", "start": 5.30, "duration": 1.8, "prompts": [
-          "Old wooden door slowly creaking open with rusty metal hinges squeaking, echoing in empty hallway, 1.8 seconds",
-          "Heavy oak door groaning with stress, metal hardware rattling, slow sustained creak lasting 1.8 seconds",
-          "Antique door with worn hinges producing high-pitched metallic squeal followed by deep wood groans, 1.8 second duration"
-        ]}
-        
-        Return ONLY valid JSON array. NO markdown, NO code blocks.
+        [
+            {
+                "name": "Heavy_Right_Hook",
+                "start": 1.42, 
+                "duration": 1.0, 
+                "prompts": [
+                    "Visceral bone-crushing impact with wet gore texture...",
+                    "Dry, heavy leather glove hitting face, sharp snap...",
+                    "Low-frequency cinametic boom punch..."
+                ]
+            }
+        ]
         """
 
         response = client.models.generate_content(
@@ -152,8 +167,6 @@ async def process(video: Video):
                     "seed": i * 100 + 55,
                     "model_version": "latest", 
                 }
-    
-                url = "const"
                 
                 try:
                     resp = await http_client.post(
@@ -163,10 +176,9 @@ async def process(video: Video):
                     )
 
                     if resp.status_code in [200, 201]:
-                        api_url = resp.json().get("audio_url")
-                        if api_url:
-                            url = api_url
-                            print(f"✓ Mirelo success: {event.name} variation {i+1}")
+                        data = resp.json()
+                        url = data.get("output_paths")[0]
+                        print(f"✓ Mirelo success: {event.name} variation {i+1}")
                     else:
                         print(f"⚠️ Mirelo Error {resp.status_code}: {resp.text}") 
                         
@@ -201,3 +213,153 @@ async def process(video: Video):
         "data": results,
         "wwise_import_map": wwise_data
     }
+
+class ManualEventInput(BaseModel):
+    project: str
+    video_url: str
+    event_name: str
+    start: float
+    duration: float
+    text_prompt: str
+
+@app.post("/api/create-manual-event")
+async def create_manual_event(input: ManualEventInput):
+    """Create a single event manually with one text prompt, generate 1 variation"""
+    
+    payload = {
+        "video_url": input.video_url,
+        "start_offset": input.start,
+        "duration": input.duration,
+        "text_prompt": input.text_prompt,
+        "seed": 55,
+        "model_version": "latest",
+    }
+    
+    url = None
+    
+    async with httpx.AsyncClient(verify=False, timeout=60.0) as http_client:
+        try:
+            resp = await http_client.post(
+                "https://api.mirelo.ai/video-to-sfx",
+                json=payload,
+                headers={"x-api-key": MIRELO_KEY}
+            )
+            
+            if resp.status_code in [200, 201]:
+                data = resp.json()
+                url = data.get("output_paths")[0]
+                print(f"✓ Manual event created: {input.event_name}")
+            else:
+                print(f"⚠️ Mirelo Error {resp.status_code}: {resp.text}")
+                raise HTTPException(status_code=resp.status_code, detail=f"Mirelo API error: {resp.text}")
+                
+        except httpx.HTTPError as e:
+            print(f"✗ HTTP Error: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to call Mirelo API: {str(e)}")
+    
+    if not url:
+        raise HTTPException(status_code=500, detail="No audio URL received from Mirelo")
+    
+    try:
+        result = supabase.table("assets").insert({
+            "project": input.project,
+            "event_name": input.event_name,
+            "timestamp": input.start,
+            "variations": [url],
+            "prompts": [input.text_prompt]
+        }).execute()
+        
+        return {
+            "status": "success",
+            "event": {
+                "name": input.event_name,
+                "start": input.start,
+                "duration": input.duration,
+                "variations": [url],
+                "prompts": [input.text_prompt]
+            }
+        }
+    except Exception as e:
+        print(f"✗ Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save to database: {str(e)}")
+
+class RegenerateVariationInput(BaseModel):
+    event_id: int
+    variation_index: int
+    video_url: str
+    start: float
+    duration: float
+    text_prompt: str
+
+@app.post("/api/regenerate-variation")
+async def regenerate_variation(input: RegenerateVariationInput):
+    """Regenerate a specific variation with a new text prompt"""
+    
+    payload = {
+        "video_url": input.video_url,
+        "start_offset": input.start,
+        "duration": input.duration,
+        "text_prompt": input.text_prompt,
+        "seed": input.variation_index * 100 + 55,
+        "model_version": "latest",
+    }
+    
+    new_url = None
+    
+    async with httpx.AsyncClient(verify=False, timeout=60.0) as http_client:
+        try:
+            resp = await http_client.post(
+                "https://api.mirelo.ai/video-to-sfx",
+                json=payload,
+                headers={"x-api-key": MIRELO_KEY}
+            )
+            
+            if resp.status_code in [200, 201]:
+                data = resp.json()
+                new_url = data.get("output_paths")[0]
+                print(f"✓ Variation regenerated for event ID {input.event_id}, index {input.variation_index}")
+            else:
+                print(f"⚠️ Mirelo Error {resp.status_code}: {resp.text}")
+                raise HTTPException(status_code=resp.status_code, detail=f"Mirelo API error: {resp.text}")
+                
+        except httpx.HTTPError as e:
+            print(f"✗ HTTP Error: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to call Mirelo API: {str(e)}")
+    
+    if not new_url:
+        raise HTTPException(status_code=500, detail="No audio URL received from Mirelo")
+    
+    try:
+        event_data = supabase.table("assets").select("*").eq("id", input.event_id).execute()
+        
+        if not event_data.data:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        event = event_data.data[0]
+        variations = event.get("variations", [])
+        prompts = event.get("prompts", [])
+        
+        # Update the specific variation and prompt
+        if input.variation_index < len(variations):
+            variations[input.variation_index] = new_url
+        
+        if input.variation_index < len(prompts):
+            prompts[input.variation_index] = input.text_prompt
+        
+        # Update database
+        supabase.table("assets").update({
+            "variations": variations,
+            "prompts": prompts
+        }).eq("id", input.event_id).execute()
+        
+        return {
+            "status": "success",
+            "variation": {
+                "index": input.variation_index,
+                "url": new_url,
+                "prompt": input.text_prompt
+            }
+        }
+    except Exception as e:
+        print(f"✗ Database error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update database: {str(e)}")

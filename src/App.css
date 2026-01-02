@@ -481,6 +481,193 @@
   border-left: 2px solid rgba(255, 50, 50, 0.4);
 }
 
+/* Manual Event Form */
+.event-controls {
+  margin-bottom: 15px;
+}
+
+.add-event-btn {
+  width: 100%;
+  padding: 10px;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.5);
+  color: #00ff88;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.add-event-btn:hover {
+  background: rgba(0, 255, 136, 0.2);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+
+.manual-event-form {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+
+.manual-event-form h4 {
+  color: #00ff88;
+  font-size: 12px;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.manual-event-form input,
+.manual-event-form textarea {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  border-radius: 4px;
+}
+
+.manual-event-form input:focus,
+.manual-event-form textarea:focus {
+  outline: none;
+  border-color: #00ff88;
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.create-btn,
+.cancel-btn {
+  flex: 1;
+  padding: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.create-btn {
+  background: #00ff88;
+  border: none;
+  color: #000;
+}
+
+.create-btn:hover:not(:disabled) {
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+}
+
+.create-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.cancel-btn:hover {
+  border-color: #ff3232;
+  color: #ff3232;
+}
+
+/* Variation Editing */
+.var-prompt-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.prompt-edit {
+  width: 100%;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(0, 255, 136, 0.5);
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  border-radius: 4px;
+  resize: vertical;
+}
+
+.prompt-edit:focus {
+  outline: none;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.regenerate-btn,
+.cancel-edit-btn,
+.edit-prompt-btn {
+  padding: 6px 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+.regenerate-btn {
+  flex: 1;
+  background: #00ff88;
+  border: none;
+  color: #000;
+}
+
+.regenerate-btn:hover:not(:disabled) {
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+}
+
+.regenerate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-edit-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.cancel-edit-btn:hover {
+  border-color: #ff3232;
+  color: #ff3232;
+}
+
+.edit-prompt-btn {
+  width: 100%;
+  background: rgba(0, 255, 136, 0.1);
+  border: 1px solid rgba(0, 255, 136, 0.3);
+  color: #00ff88;
+  margin-top: 4px;
+}
+
+.edit-prompt-btn:hover {
+  background: rgba(0, 255, 136, 0.2);
+  border-color: #00ff88;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

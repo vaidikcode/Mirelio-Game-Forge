@@ -21,6 +21,16 @@ function VideoEditor() {
   const [isUploading, setIsUploading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState('')
+  const [showManualEventForm, setShowManualEventForm] = useState(false)
+  const [manualEvent, setManualEvent] = useState({
+    name: '',
+    start: 0,
+    duration: 1.0,
+    prompt: ''
+  })
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false)
+  const [editingVariation, setEditingVariation] = useState(null)
+  const [regeneratingIndex, setRegeneratingIndex] = useState(null)
   const videoRef = useRef(null)
   const videoTimeoutRef = useRef(null)
 
@@ -104,6 +114,100 @@ function VideoEditor() {
     setSelectedEvent(null)
     setWwiseImportMap('')
     setError('')
+    setShowManualEventForm(false)
+    setManualEvent({ name: '', start: 0, duration: 1.0, prompt: '' })
+  }
+
+  const handleCreateManualEvent = async () => {
+    if (!manualEvent.name || !manualEvent.prompt || !videoUrl || !projectName) {
+      setError('Please fill all fields')
+      return
+    }
+
+    setIsCreatingEvent(true)
+    setError('')
+
+    try {
+      const response = await axios.post(`${API_URL}/api/create-manual-event`, {
+        project: projectName,
+        video_url: videoUrl,
+        event_name: manualEvent.name,
+        start: parseFloat(manualEvent.start),
+        duration: parseFloat(manualEvent.duration),
+        text_prompt: manualEvent.prompt
+      })
+
+      if (response.data.status === 'success') {
+        // Refresh events from database
+        const { data: dbEvents } = await supabase
+          .from('assets')
+          .select('*')
+          .eq('project', projectName)
+          .order('timestamp', { ascending: true })
+
+        const formattedEvents = dbEvents.map(e => ({
+          name: e.event_name,
+          start: e.timestamp,
+          duration: 1.0, // Default if not stored
+          variations: e.variations || [],
+          prompts: e.prompts || [],
+          id: e.id
+        }))
+
+        setEvents(formattedEvents)
+        setShowManualEventForm(false)
+        setManualEvent({ name: '', start: 0, duration: 1.0, prompt: '' })
+      }
+    } catch (err) {
+      setError(`Failed to create event: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setIsCreatingEvent(false)
+    }
+  }
+
+  const handleRegenerateVariation = async (eventId, variationIndex, newPrompt) => {
+    if (!newPrompt || !selectedEvent) return
+
+    setRegeneratingIndex(variationIndex)
+    setError('')
+
+    try {
+      const response = await axios.post(`${API_URL}/api/regenerate-variation`, {
+        event_id: eventId,
+        variation_index: variationIndex,
+        video_url: videoUrl,
+        start: selectedEvent.start,
+        duration: selectedEvent.duration,
+        text_prompt: newPrompt
+      })
+
+      if (response.data.status === 'success') {
+        // Update the specific variation in state
+        const updatedEvents = events.map(event => {
+          if (event.id === eventId) {
+            const newVariations = [...event.variations]
+            const newPrompts = [...event.prompts]
+            newVariations[variationIndex] = response.data.variation.url
+            newPrompts[variationIndex] = response.data.variation.prompt
+            return { ...event, variations: newVariations, prompts: newPrompts }
+          }
+          return event
+        })
+        
+        setEvents(updatedEvents)
+        
+        if (selectedEvent.id === eventId) {
+          const updatedSelected = updatedEvents.find(e => e.id === eventId)
+          setSelectedEvent(updatedSelected)
+        }
+        
+        setEditingVariation(null)
+      }
+    } catch (err) {
+      setError(`Failed to regenerate: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setRegeneratingIndex(null)
+    }
   }
 
   const handleBackToProjects = () => {
@@ -224,6 +328,67 @@ function VideoEditor() {
               <div className="project-name">{projectName}</div>
               <div className="project-stats">{events.length} events detected</div>
             </div>
+
+            <div className="event-controls">
+              <button 
+                className="add-event-btn"
+                onClick={() => setShowManualEventForm(!showManualEventForm)}
+              >
+                + ADD EVENT MANUALLY
+              </button>
+            </div>
+
+            {showManualEventForm && (
+              <div className="manual-event-form">
+                <h4>CREATE EVENT</h4>
+                <input
+                  type="text"
+                  placeholder="Event Name"
+                  value={manualEvent.name}
+                  onChange={(e) => setManualEvent({ ...manualEvent, name: e.target.value })}
+                  className="terminal-input"
+                />
+                <input
+                  type="number"
+                  placeholder="Start (seconds)"
+                  step="0.1"
+                  value={manualEvent.start}
+                  onChange={(e) => setManualEvent({ ...manualEvent, start: e.target.value })}
+                  className="terminal-input"
+                />
+                <input
+                  type="number"
+                  placeholder="Duration (seconds)"
+                  step="0.1"
+                  min="1.0"
+                  value={manualEvent.duration}
+                  onChange={(e) => setManualEvent({ ...manualEvent, duration: e.target.value })}
+                  className="terminal-input"
+                />
+                <textarea
+                  placeholder="Text Prompt for Mirelo"
+                  rows="3"
+                  value={manualEvent.prompt}
+                  onChange={(e) => setManualEvent({ ...manualEvent, prompt: e.target.value })}
+                  className="terminal-input"
+                />
+                <div className="form-actions">
+                  <button 
+                    onClick={handleCreateManualEvent}
+                    disabled={isCreatingEvent}
+                    className="create-btn"
+                  >
+                    {isCreatingEvent ? 'CREATING...' : 'CREATE'}
+                  </button>
+                  <button 
+                    onClick={() => setShowManualEventForm(false)}
+                    className="cancel-btn"
+                  >
+                    CANCEL
+                  </button>
+                </div>
+              </div>
+            )}
 
             <nav className="event-nav">
               <div className="nav-label">EVENTS</div>
@@ -348,8 +513,48 @@ function VideoEditor() {
                   onEnded={handleAudioEnded}
                   onError={(e) => console.error('Audio playback error:', e)}
                 />
-                <div className="var-prompt">
-                  {selectedEvent.prompts[idx] || 'Generated audio'}
+                <div className="var-prompt-container">
+                  {editingVariation === idx ? (
+                    <>
+                      <textarea
+                        className="prompt-edit"
+                        value={editingVariation === idx ? selectedEvent.prompts[idx] : ''}
+                        onChange={(e) => {
+                          const updatedPrompts = [...selectedEvent.prompts]
+                          updatedPrompts[idx] = e.target.value
+                          setSelectedEvent({ ...selectedEvent, prompts: updatedPrompts })
+                        }}
+                        rows="3"
+                      />
+                      <div className="prompt-actions">
+                        <button
+                          className="regenerate-btn"
+                          onClick={() => handleRegenerateVariation(selectedEvent.id, idx, selectedEvent.prompts[idx])}
+                          disabled={regeneratingIndex === idx}
+                        >
+                          {regeneratingIndex === idx ? 'Generating...' : 'Regenerate'}
+                        </button>
+                        <button
+                          className="cancel-edit-btn"
+                          onClick={() => setEditingVariation(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="var-prompt">
+                        {selectedEvent.prompts[idx] || 'Generated audio'}
+                      </div>
+                      <button
+                        className="edit-prompt-btn"
+                        onClick={() => setEditingVariation(idx)}
+                      >
+                        Edit Prompt
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
