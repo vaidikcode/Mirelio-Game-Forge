@@ -65,42 +65,6 @@ def generate_wwise_map(results: List[EventOutput], project_name: str) -> str:
             
     return output
 
-async def generate_fallback_audio(
-    http_client: httpx.AsyncClient, 
-    prompt: str, 
-    duration: float, 
-    project: str,
-    name: str,
-    index: int
-) -> str:
-    print(f"   ⚠️ Fallback to ElevenLabs: '{prompt[:15]}...'")
-    try:
-        payload = {
-            "text": prompt,
-            "duration_seconds": max(duration, 0.5), 
-            "prompt_influence": 0.5
-        }
-        
-        resp = await http_client.post(
-            "https://api.elevenlabs.io/v1/sound-generation",
-            json=payload,
-            headers={"xi-api-key": ELEVENLABS_KEY, "Content-Type": "application/json"}
-        )
-
-        if resp.status_code == 200:
-            filename = f"{project}/{name.replace(' ', '_')}_fallback_{index}.mp3"
-            supabase.storage.from_("videos").upload(
-                path=filename,
-                file=resp.content,
-                file_options={"content-type": "audio/mpeg", "upsert": "true"}
-            )
-            return supabase.storage.from_("videos").get_public_url(filename)
-            
-    except Exception as e:
-        print(f"   Fallback failed: {e}")
-    
-    return "const"
-
 async def analyse_timestamps(video_url: str) -> List[EventInput]:
     try:
         async with httpx.AsyncClient(verify=False) as http_client:
@@ -115,12 +79,12 @@ async def analyse_timestamps(video_url: str) -> List[EventInput]:
         CRITICAL REQUIREMENTS:
         1. Watch the ENTIRE video carefully to identify ALL significant gameplay events
         2. For EACH event, determine the EXACT moment it begins (in seconds with 2 decimal precision)
-        3. Calculate REALISTIC duration - how long the action/sound should last (minimum 1s, maximum 5s)
+        3. Calculate REALISTIC duration - how long the action/sound should last (minimum 1s)
         
         For each event provide:
         - name: Short, descriptive name (e.g., "Jump", "Sword Swing", "Footstep")
-        - start: Exact timestamp in seconds when the action BEGINS (e.g., 2.45)
-        - duration: How long the sound effect should last (e.g., 1.2 for a quick action, 2.5 for longer)
+        - start: Exact timestamp in seconds when the action BEGINS
+        - duration: How long the sound effect should last. Should be minimum 1 second.
         - prompts: Array of 3 DISTINCT, highly detailed audio descriptions that:
           * Describe the sonic characteristics (pitch, tone, intensity)
           * Include environmental context (echoes, reverb, space)
@@ -208,12 +172,6 @@ async def process(video: Video):
                         
                 except Exception as e:
                     print(f"   Mirelo Call Failed: {e}")
-
-                if url == "const":
-                    url = await generate_fallback_audio(
-                        http_client, text_prompt, event.duration, 
-                        video.project, event.name, i
-                    )
 
                 variations.append(url)
 
